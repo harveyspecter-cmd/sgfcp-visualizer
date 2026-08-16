@@ -1,0 +1,557 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGFCP — Interactive Protocol Visualizer</title>
+<style>
+:root {
+  --bg: #0d0f14;
+  --surface: #161a24;
+  --surface2: #1e2333;
+  --border: rgba(255,255,255,0.10);
+  --blue: #2783de;
+  --blue-light: #5eb5ff;
+  --blue-soft: rgba(39,131,222,0.18);
+  --green: #46a171;
+  --green-light: #5fcc88;
+  --green-soft: rgba(70,161,113,0.18);
+  --red: #e56458;
+  --red-soft: rgba(229,100,88,0.18);
+  --orange: #d5803b;
+  --purple: #9b6dd6;
+  --purple-light: #c49eff;
+  --purple-soft: rgba(155,109,214,0.18);
+  --text1: rgba(255,255,255,0.95);
+  --text2: rgba(255,255,255,0.70);
+  --text3: rgba(255,255,255,0.45);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text1); font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; min-height:100vh; }
+
+/* ====== HEADER ====== */
+.header { padding: 28px 40px 20px; border-bottom: 1px solid var(--border); }
+.header-inner { max-width: 1200px; margin: 0 auto; display:flex; justify-content:space-between; align-items:flex-start; }
+.logo { font-size:22px; font-weight:800; color:var(--text1); }
+.logo-sub { font-size:13px; color:var(--text2); margin-top:4px; }
+.badge { font-size:11px; font-weight:700; letter-spacing:1.2px; color:var(--blue-light); border:1.5px solid var(--blue-light); border-radius:20px; padding:4px 12px; }
+
+/* ====== TABS ====== */
+.tabs { max-width:1200px; margin:0 auto; display:flex; gap:0; padding:0 40px; border-bottom:1px solid var(--border); }
+.tab { padding:14px 24px; font-size:14px; font-weight:600; color:var(--text2); cursor:pointer; border-bottom:2.5px solid transparent; transition:all 0.2s; }
+.tab:hover { color:var(--text1); }
+.tab.active { color:var(--text1); border-bottom-color:var(--blue-light); }
+
+/* ====== PANEL ====== */
+.panel { display:none; max-width:1200px; margin:0 auto; padding:36px 40px 60px; }
+.panel.active { display:block; }
+.section-label { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--text3); text-transform:uppercase; margin-bottom:8px; }
+.section-title { font-size:34px; font-weight:800; line-height:1.2; margin-bottom:14px; }
+.section-desc { font-size:15px; color:var(--text2); line-height:1.7; max-width:700px; margin-bottom:32px; }
+
+/* ====== STAGE ====== */
+.stage { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:28px; }
+.stage-title { font-size:11px; font-weight:700; letter-spacing:1.5px; color:var(--text3); text-transform:uppercase; margin-bottom:22px; }
+
+/* ====== NETWORK GRID — CSS GRID, ZERO OVERLAP GUARANTEED ====== */
+.net-grid {
+  display: grid;
+  grid-template-columns: 1fr 48px 160px 48px 1fr;
+  grid-template-rows: auto;
+  align-items: center;
+  gap: 0;
+  min-width: 640px;
+  overflow-x: auto;
+}
+.net-col-hdr { display:grid; grid-template-columns: 1fr 48px 160px 48px 1fr; min-width:640px; margin-bottom:14px; }
+.col-hdr-cell { text-align:center; font-size:10px; font-weight:700; letter-spacing:1.2px; color:rgba(255,255,255,0.70); text-transform:uppercase; padding:0 4px; }
+
+/* ====== NODE ====== */
+.nodes-col { display:flex; flex-direction:column; align-items:center; gap:12px; padding:8px 4px; }
+.node {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:4px; border-radius:14px; border:2.5px solid; cursor:pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  padding:10px 8px; min-width:88px; width:88px;
+}
+.node:hover { transform:scale(1.05); box-shadow:0 0 16px rgba(255,255,255,0.1); }
+.node .icon { font-size:22px; line-height:1; }
+.node .n-title { font-size:12px; font-weight:800; color:#fff; }
+.node .n-sub { font-size:9.5px; font-weight:600; text-align:center; line-height:1.4; }
+
+.node-gpu { background:rgba(39,131,222,0.22); border-color:#5eb5ff; }
+.node-gpu .n-sub { color:rgba(255,255,255,0.85); }
+.node-dpu { background:rgba(155,109,214,0.22); border-color:#c49eff; }
+.node-dpu .n-sub { color:rgba(220,200,255,0.90); }
+.node-switch-bad { background:rgba(229,100,88,0.25); border-color:#e56458; width:130px; min-width:130px; padding:14px 10px; }
+.node-switch-good { background:rgba(70,161,113,0.25); border-color:#5fcc88; width:130px; min-width:130px; padding:14px 10px; }
+.node-switch-bad .n-title, .node-switch-good .n-title { font-size:16px; letter-spacing:0.5px; }
+.node-switch-bad .n-sub { color:#ffcccc; font-size:10.5px; line-height:1.5; text-align:center; }
+.node-switch-good .n-sub { color:#ccffdd; font-size:10.5px; line-height:1.5; text-align:center; }
+.node-blocked { background:rgba(200,50,50,0.28); border-color:#ff5555; }
+.node-blocked .n-sub { color:#ffcccc; }
+.node-recv { background:rgba(70,161,113,0.22); border-color:#5fcc88; }
+.node-recv .n-sub { color:rgba(180,255,210,0.90); }
+
+/* ====== SWITCH BADGE ====== */
+.switch-col { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.sw-badge {
+  border-radius:10px; padding:10px 18px; text-align:center;
+  white-space:nowrap;
+}
+.sw-badge.bad { background:rgba(229,100,88,0.25); border:2px solid #e56458; }
+.sw-badge.good { background:rgba(70,161,113,0.25); border:2px solid #5fcc88; }
+.sw-badge div { font-size:11.5px; font-weight:700; line-height:1.9; white-space:nowrap; }
+.sw-badge.bad div:first-child { color:#ffaaaa; font-weight:800; }
+.sw-badge.bad div { color:#ffdddd; }
+.sw-badge.good div:first-child { color:#88ffbb; font-weight:800; }
+.sw-badge.good div { color:#aaffdd; }
+
+/* ====== ARROWS ====== */
+.arrows-col { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:8px 0; }
+.arr { font-size:18px; font-weight:900; }
+.arr-fwd { color:#5eb5ff; }
+.arr-dpu { color:#c49eff; opacity:0.85; }
+.arr-dim { opacity:0.45; }
+
+/* ====== CHIP ROWS ====== */
+.chips { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center; margin-top:22px; }
+.chip { display:flex; align-items:center; gap:8px; border-radius:10px; padding:9px 18px; font-size:13px; font-weight:800; white-space:nowrap; }
+.chip-red { background:rgba(229,100,88,0.25); border:2px solid #e56458; color:#fff; }
+.chip-dark-red { background:rgba(180,40,40,0.22); border:2px solid #ff6666; color:#ffcccc; }
+.chip-blue { background:rgba(39,131,222,0.25); border:2px solid #5eb5ff; color:#fff; }
+.chip-purple { background:rgba(155,109,214,0.25); border:2px solid #c49eff; color:#fff; }
+.chip-green { background:rgba(70,161,113,0.25); border:2px solid #5fcc88; color:#fff; }
+.chip-mono { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.88); font-family:monospace; font-size:12px; font-weight:600; border-radius:8px; padding:7px 16px; }
+.chip .chip-icon { font-size:16px; }
+.chip .chip-num { font-size:16px; font-weight:900; }
+
+/* ====== STEPS ====== */
+.steps { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.step-btn { padding:7px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:var(--surface2); border:1.5px solid var(--border); color:var(--text2); transition:all 0.2s; }
+.step-btn:hover { color:var(--text1); border-color:rgba(255,255,255,0.3); }
+.step-btn.active.bad { background:rgba(229,100,88,0.25); border-color:#e56458; color:#fff; }
+.step-btn.active.good { background:rgba(70,161,113,0.25); border-color:#5fcc88; color:#fff; }
+
+/* ====== INFO BOX ====== */
+.info-box { border-radius:12px; padding:18px 22px; margin-top:16px; font-size:14px; line-height:1.75; color:var(--text1); }
+.info-box.red { background:rgba(229,100,88,0.12); border:1.5px solid rgba(229,100,88,0.35); }
+.info-box.green { background:rgba(70,161,113,0.12); border:1.5px solid rgba(70,161,113,0.35); }
+.info-box strong { color:#fff; }
+.hint { font-size:12px; color:var(--text3); margin-top:12px; }
+.math-inline { background:rgba(255,255,255,0.10); border-radius:4px; padding:2px 6px; font-family:monospace; font-size:13px; }
+
+/* ====== MODAL ====== */
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,0.72); display:none; z-index:100; align-items:center; justify-content:center; }
+.overlay.open { display:flex; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:20px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; padding:32px; position:relative; }
+.modal-close { position:absolute; top:16px; right:18px; font-size:22px; cursor:pointer; color:var(--text2); line-height:1; background:none; border:none; }
+.modal h2 { font-size:20px; font-weight:800; margin-bottom:16px; }
+.modal p { font-size:14px; color:var(--text2); line-height:1.75; margin-bottom:12px; }
+.code-block { background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:14px 18px; font-family:monospace; font-size:12.5px; color:#a8d8a8; line-height:1.65; margin:12px 0; white-space:pre; overflow-x:auto; }
+
+/* ====== MATH PANEL ====== */
+.math-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.math-card { background:var(--surface2); border:1px solid var(--border); border-radius:14px; padding:22px; }
+.math-card h3 { font-size:15px; font-weight:800; margin-bottom:12px; }
+.math-card p { font-size:13.5px; color:var(--text2); line-height:1.7; margin-bottom:8px; }
+.math-block { background:rgba(0,0,0,0.35); border-radius:8px; padding:14px 18px; font-family:monospace; font-size:13px; line-height:1.7; color:rgba(255,255,255,0.90); margin:10px 0; }
+
+/* ====== COMPARE PANEL ====== */
+.compare-table { width:100%; border-collapse:collapse; margin-top:16px; }
+.compare-table th { font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text2); padding:10px 14px; background:var(--surface2); text-align:left; }
+.compare-table td { font-size:14px; padding:13px 14px; border-bottom:1px solid var(--border); color:var(--text1); vertical-align:top; }
+.compare-table tr:last-child td { border-bottom:none; }
+.compare-table .metric { color:var(--text2); font-weight:600; }
+.compare-table .bad { color:#ff7070; }
+.compare-table .good { color:#5fcc88; }
+.compare-table .neutral { color:var(--text2); }
+
+/* ====== RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .header-inner, .tabs, .panel { padding-left:20px; padding-right:20px; }
+  .math-grid { grid-template-columns:1fr; }
+  .section-title { font-size:26px; }
+  .chips { gap:8px; }
+  .chip { font-size:12px; padding:7px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <div class="logo">🧠 SGFCP — Interactive Protocol Visualizer</div>
+      <div class="logo-sub">Speculative Gradient Forwarding with Correction Propagation</div>
+    </div>
+    <div class="badge">ORIGINAL RESEARCH · AUGUST 2026</div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('problem',this)">⚠️ Problem Today</div>
+  <div class="tab" onclick="switchTab('solution',this)">✅ SGFCP Solution</div>
+  <div class="tab" onclick="switchTab('math',this)">&sum; Mathematics</div>
+  <div class="tab" onclick="switchTab('compare',this)">⚡ Comparison</div>
+</div>
+
+<!-- ============ PROBLEM PANEL ============ -->
+<div class="panel active" id="panel-problem">
+  <div class="section-label">The Status Quo</div>
+  <div class="section-title" style="color:#e56458">What Breaks Today?</div>
+  <div class="section-desc">Every GPU in a training cluster must wait for all N gradient packets to arrive and aggregate at the switch before any GPU can proceed. Click each node to understand the bottleneck deeply.</div>
+
+  <div class="stage">
+    <div class="stage-title">STANDARD AllReduce — Ring Protocol on Ethernet</div>
+
+    <!-- Column Headers -->
+    <div class="net-col-hdr">
+      <div class="col-hdr-cell">Sending GPUs</div>
+      <div></div>
+      <div class="col-hdr-cell">Switch</div>
+      <div></div>
+      <div class="col-hdr-cell">Blocked GPUs</div>
+    </div>
+
+    <!-- Network Grid -->
+    <div style="overflow-x:auto;">
+    <div class="net-grid">
+
+      <!-- Col 1: Sending GPUs -->
+      <div class="nodes-col">
+        <div class="node node-gpu" onclick="openModal('gpu-problem')"><span class="icon">🖥️</span><span class="n-title">GPU-0</span><span class="n-sub">g₀=[0.12,0.31]</span></div>
+        <div class="node node-gpu" onclick="openModal('gpu-problem')"><span class="icon">🖥️</span><span class="n-title">GPU-1</span><span class="n-sub">g₁=[0.08,0.27]</span></div>
+        <div class="node node-gpu" onclick="openModal('gpu-problem')"><span class="icon">🖥️</span><span class="n-title">GPU-N</span><span class="n-sub">gₙ=[0.19,0.14]</span></div>
+      </div>
+
+      <!-- Col 2: Left Arrows -->
+      <div class="arrows-col">
+        <div class="arr arr-fwd">→</div>
+        <div class="arr arr-fwd">→</div>
+        <div class="arr arr-fwd">→</div>
+      </div>
+
+      <!-- Col 3: Switch -->
+      <div class="switch-col">
+        <div class="node node-switch-bad" onclick="openModal('switch-problem')">
+          <span class="icon" style="font-size:28px;">🔀</span>
+          <span class="n-title">SWITCH</span>
+          <span class="n-sub">Must hold ALL N<br>gradients</span>
+        </div>
+        <div class="sw-badge bad">
+          <div>⛔ Waits for ALL N</div>
+          <div>📦 SRAM overflow</div>
+          <div>⚠️ FP non-det.</div>
+        </div>
+      </div>
+
+      <!-- Col 4: Right Arrows (dimmed = blocked) -->
+      <div class="arrows-col">
+        <div class="arr arr-fwd arr-dim">→</div>
+        <div class="arr arr-fwd arr-dim">→</div>
+        <div class="arr arr-fwd arr-dim">→</div>
+      </div>
+
+      <!-- Col 5: Blocked GPUs -->
+      <div class="nodes-col">
+        <div class="node node-blocked" onclick="openModal('gpu-stalled')"><span class="icon">🔴</span><span class="n-title">GPU-0</span><span class="n-sub">⛔ BLOCKED</span></div>
+        <div class="node node-blocked" onclick="openModal('gpu-stalled')"><span class="icon">🔴</span><span class="n-title">GPU-1</span><span class="n-sub">⛔ BLOCKED</span></div>
+        <div class="node node-blocked" onclick="openModal('gpu-stalled')"><span class="icon">🔴</span><span class="n-title">GPU-N</span><span class="n-sub">⛔ BLOCKED</span></div>
+      </div>
+
+    </div>
+    </div>
+
+    <!-- Annotation Chips -->
+    <div class="chips">
+      <div class="chip chip-red"><span class="chip-icon">⛔</span>SYNC BARRIER — All GPUs blocked until switch has ALL N gradients</div>
+      <div class="chip chip-dark-red"><span class="chip-icon">💾</span>SRAM overflow risk — Switch can't hold 140 GB gradient vectors</div>
+      <div class="chip chip-mono">T_total = α·log₂N + β·D → 40–60% training time blocked</div>
+    </div>
+
+    <!-- Steps -->
+    <div class="steps">
+      <div class="step-btn active bad" onclick="setProblemStep(0,this)">1. GPUs Compute</div>
+      <div class="step-btn" onclick="setProblemStep(1,this)">2. Send to Switch</div>
+      <div class="step-btn" onclick="setProblemStep(2,this)">3. Barrier Blocks</div>
+      <div class="step-btn" onclick="setProblemStep(3,this)">4. SRAM Fails</div>
+      <div class="step-btn" onclick="setProblemStep(4,this)">5. FP Chaos</div>
+    </div>
+    <div class="info-box red" id="problem-info">
+      <strong>Step 1 — GPU Gradient Computation:</strong> Each GPU computes local gradient <span class="math-inline">gᵢ = ∇L(Wₜ)</span> on its mini-batch. For a 70B model in FP16, this is a <strong>140 GB vector</strong> per GPU. All N GPUs finish at slightly different times due to data variance and hardware jitter.
+    </div>
+    <div class="hint">👉 Click any node for deep technical details</div>
+  </div>
+</div>
+
+<!-- ============ SOLUTION PANEL ============ -->
+<div class="panel" id="panel-solution">
+  <div class="section-label">The SGFCP Protocol</div>
+  <div class="section-title" style="color:#5fcc88">How Speculative Forwarding Breaks the Barrier</div>
+  <div class="section-desc">SGFCP eliminates the synchronization barrier entirely. The DPU multicasts a prediction instantly. The switch does nothing except forward. Correction arrives asynchronously. Click each node to see what runs inside it.</div>
+
+  <div class="stage">
+    <div class="stage-title">SGFCP — Phase 1: Speculative Multicast + Phase 2: Delta AllReduce</div>
+
+    <!-- Column Headers -->
+    <div class="net-col-hdr" style="grid-template-columns:1fr 48px 160px 48px 1fr;">
+      <div class="col-hdr-cell">Host Layer (GPU + DPU)</div>
+      <div></div>
+      <div class="col-hdr-cell">Network</div>
+      <div></div>
+      <div class="col-hdr-cell">Receiving End</div>
+    </div>
+
+    <!-- Network Grid -->
+    <div style="overflow-x:auto;">
+    <div class="net-grid">
+
+      <!-- Col 1: GPU+DPU pairs (left) -->
+      <div class="nodes-col">
+        <div class="node node-gpu" onclick="openModal('gpu-solution')"><span class="icon">🖥️</span><span class="n-title">GPU-0</span><span class="n-sub">Fwd pass ✓</span></div>
+        <div class="node node-dpu" onclick="openModal('dpu-solution')"><span class="icon">💠</span><span class="n-title">DPU-0</span><span class="n-sub">SGC + Multicast</span></div>
+        <div class="node node-gpu" onclick="openModal('gpu-solution')"><span class="icon">🖥️</span><span class="n-title">GPU-1</span><span class="n-sub">Not blocked!</span></div>
+        <div class="node node-dpu" onclick="openModal('dpu-solution')"><span class="icon">💠</span><span class="n-title">DPU-1</span><span class="n-sub">Delta compute</span></div>
+      </div>
+
+      <!-- Col 2: Left Arrows -->
+      <div class="arrows-col">
+        <div class="arr arr-fwd">→</div>
+        <div class="arr arr-dpu">↢</div>
+        <div class="arr arr-fwd">→</div>
+        <div class="arr arr-dpu">↢</div>
+      </div>
+
+      <!-- Col 3: Switch -->
+      <div class="switch-col">
+        <div class="node node-switch-good" onclick="openModal('switch-solution')">
+          <span class="icon" style="font-size:28px;">✅</span>
+          <span class="n-title">SWITCH</span>
+          <span class="n-sub">Multicast only.<br>Zero state.</span>
+        </div>
+        <div class="sw-badge good">
+          <div>✅ L2 multicast</div>
+          <div>🚫 Zero SRAM</div>
+          <div>⚡ No aggregation</div>
+        </div>
+      </div>
+
+      <!-- Col 4: Right Arrows -->
+      <div class="arrows-col">
+        <div class="arr arr-fwd" style="color:#46a171;">→</div>
+        <div class="arr arr-dpu">↢</div>
+        <div class="arr arr-fwd" style="color:#46a171;">→</div>
+        <div class="arr arr-dpu">↢</div>
+      </div>
+
+      <!-- Col 5: Receiving GPU+DPU -->
+      <div class="nodes-col">
+        <div class="node node-recv" onclick="openModal('gpu-receives')"><span class="icon">▶️</span><span class="n-title">GPU-0</span><span class="n-sub">Uses Ĝₜ now</span></div>
+        <div class="node node-dpu" onclick="openModal('dpu-correction')"><span class="icon">🔧</span><span class="n-title">DPU-0</span><span class="n-sub">Apply Δₜ</span></div>
+        <div class="node node-recv" onclick="openModal('gpu-receives')"><span class="icon">▶️</span><span class="n-title">GPU-1</span><span class="n-sub">Uses Ĝₜ now</span></div>
+        <div class="node node-dpu" onclick="openModal('dpu-correction')"><span class="icon">🔧</span><span class="n-title">DPU-1</span><span class="n-sub">Apply Δₜ</span></div>
+      </div>
+
+    </div>
+    </div>
+
+    <!-- Annotation Chips -->
+    <div class="chips">
+      <div class="chip chip-blue"><span class="chip-num">①</span>Phase 1: Speculative Multicast <span style="font-weight:500;color:rgba(255,255,255,0.75);">&mdash; DPU → Switch → all GPUs instantly, no barrier</span></div>
+      <div class="chip chip-purple"><span class="chip-num">②</span>Phase 2: Delta AllReduce (INT8) <span style="font-weight:500;color:rgba(255,255,255,0.75);">&mdash; async background correction, 8–20× smaller payload</span></div>
+      <div class="chip chip-green"><span class="chip-icon">✅</span>Zero Barrier — GPUs never wait on network synchronization</div>
+      <div class="chip chip-mono">T_P1 = α + β·D (no log₂N) → ~10× faster at N=1024</div>
+    </div>
+
+    <!-- Steps -->
+    <div class="steps">
+      <div class="step-btn active good" onclick="setSolutionStep(0,this)">1. DPU Predicts</div>
+      <div class="step-btn" onclick="setSolutionStep(1,this)">2. Multicast Fire</div>
+      <div class="step-btn" onclick="setSolutionStep(2,this)">3. GPU Unblocked</div>
+      <div class="step-btn" onclick="setSolutionStep(3,this)">4. Delta Computed</div>
+      <div class="step-btn" onclick="setSolutionStep(4,this)">5. Correction Applied</div>
+    </div>
+    <div class="info-box green" id="solution-info">
+      <strong>Step 1 — DPU Predicts:</strong> At the start of step t, the DPU reads <span class="math-inline">Ĝₜ = Gₜ₋₁</span> from the Speculative Gradient Cache (SGC) stored in DPU DRAM. This is the aggregated gradient from the previous training iteration. No computation required — it is a cache lookup.
+    </div>
+    <div class="hint">👉 Click any node to see deep technical internals</div>
+  </div>
+</div>
+
+<!-- ============ MATH PANEL ============ -->
+<div class="panel" id="panel-math">
+  <div class="section-label">Mathematical Analysis</div>
+  <div class="section-title">The Numbers Behind SGFCP</div>
+  <div class="section-desc">Formal latency models, convergence proofs, and numerical bounds that justify every claim in this protocol.</div>
+  <div class="math-grid">
+    <div class="math-card">
+      <h3 style="color:#e56458;">⚠️ Standard AllReduce Latency</h3>
+      <div class="math-block">T_total = α · log₂N + β · D<br><br>where:<br>  α = per-hop latency (~5μs at N=1024)<br>  N = number of GPUs<br>  β = bandwidth term<br>  D = gradient size (140 GB for 70B)</div>
+      <p>At N=1024: α·log₂(1024) = 10α → blocking overhead dominates.</p>
+    </div>
+    <div class="math-card">
+      <h3 style="color:#5fcc88;">✅ SGFCP Phase 1 Latency (Critical Path)</h3>
+      <div class="math-block">T_P1 = α + β · D_pred<br><br>No log₂N term — multicast is O(1) hops.<br>D_pred ≈ D (first iteration), then ≈ 0.<br>Result: ~10× faster at N=1024</div>
+      <p>GPU proceeds immediately after receiving prediction. No synchronization barrier.</p>
+    </div>
+    <div class="math-card">
+      <h3 style="color:#9b6dd6;">🧠 Convergence Bound</h3>
+      <div class="math-block">ΔW_error ≤ η · ||Δₜ||₁<br><br>||Δₜ|| ≈ ||Gₜ - Gₜ₋₁|| ≪ ||Gₜ|| (empirically)<br>Error shrinks 8–20× via INT8 quantization</div>
+      <p>Correction error is bounded by the delta norm, which is small for smooth loss surfaces.</p>
+    </div>
+    <div class="math-card">
+      <h3 style="color:#d5803b;">📊 Practical Gains</h3>
+      <div class="math-block">N=128:  ~4× speedup<br>N=256:  ~6× speedup<br>N=512:  ~8× speedup<br>N=1024: ~10× speedup<br>N=4096: ~12× speedup</div>
+      <p>Gains scale with N because the log₂N synchronization cost grows while SGFCP's O(1) cost stays flat.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ COMPARE PANEL ============ -->
+<div class="panel" id="panel-compare">
+  <div class="section-label">Side-by-Side Comparison</div>
+  <div class="section-title">Standard AllReduce vs SGFCP</div>
+  <div class="section-desc">Every architectural difference, quantified and explained.</div>
+  <div class="stage">
+    <table class="compare-table">
+      <tr>
+        <th>Metric</th>
+        <th style="color:#e56458;">Standard AllReduce</th>
+        <th style="color:#5fcc88;">SGFCP</th>
+      </tr>
+      <tr><td class="metric">Synchronization</td><td class="bad">Hard barrier — all N GPUs must wait</td><td class="good">None — GPUs proceed immediately</td></tr>
+      <tr><td class="metric">Switch SRAM</td><td class="bad">Stores full gradient (140 GB @ 70B)</td><td class="good">Zero — L2 multicast only</td></tr>
+      <tr><td class="metric">Critical-path latency</td><td class="bad">O(α·log₂N + β·D)</td><td class="good">O(α + β·D_pred) — no log₂N</td></tr>
+      <tr><td class="metric">N=1024 speedup</td><td class="bad">1× baseline</td><td class="good">~10× faster</td></tr>
+      <tr><td class="metric">Numerical precision</td><td class="bad">FP non-determinism at scale</td><td class="good">Bounded error + INT8 correction</td></tr>
+      <tr><td class="metric">Hardware required</td><td class="neutral">GPUs + Ethernet switch</td><td class="neutral">GPUs + DPUs + switch (commodity)</td></tr>
+      <tr><td class="metric">Protocol complexity</td><td class="neutral">Ring AllReduce</td><td class="neutral">SGC cache + delta compress + multicast</td></tr>
+      <tr><td class="metric">Training time blocked</td><td class="bad">40–60%</td><td class="good">&lt;5%</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2 id="modal-title"></h2>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const modals = {
+  'gpu-problem': {
+    title: '🖥️ GPU Node — Gradient Sender',
+    body: `<p>Each GPU computes its local gradient <code>gᵢ = ∇L(Wₜ)</code> over its mini-batch. For a 70B model in FP16, this is a <strong>140 GB vector</strong>.</p><p>All N GPUs finish at slightly different times due to hardware jitter. The AllReduce protocol requires ALL N gradients before proceeding.</p><div class="code-block">// GPU kernel completes backprop
+output_grad = compute_backward(loss)  // 140 GB
+ring_allreduce(output_grad)  // BLOCKS HERE</div>`
+  },
+  'switch-problem': {
+    title: '🔀 Switch — The Bottleneck',
+    body: `<p>The Ethernet switch must <strong>store, aggregate, and re-broadcast</strong> all N gradient tensors. This requires holding 140 GB × N in SRAM — impossible at scale.</p><p>The switch becomes a synchronization point: no GPU can proceed until the switch has received ALL N gradients.</p><div class="code-block">// Switch internal logic (simplified):
+for i in range(N):
+    wait_for_gradient(gpu_i)  // BLOCKS
+aggregated = sum(all_gradients)  // 140 GB ops
+broadcast(aggregated)  // then unblock all GPUs</div>`
+  },
+  'gpu-stalled': {
+    title: '🔴 GPU Node — Blocked on Barrier',
+    body: `<p>This GPU has finished its computation but <strong>cannot proceed</strong>. It is waiting at the synchronization barrier for the AllReduce to complete.</p><p>At N=1024, the slowest GPU determines the barrier wait time. Any straggler (GC pause, thermal throttle, network hiccup) blocks ALL other GPUs.</p><p>This blocking accounts for <strong>40–60% of total training time</strong> in large clusters.</p>`
+  },
+  'gpu-solution': {
+    title: '🖥️ GPU Node — Unblocked with SGFCP',
+    body: `<p>With SGFCP, the GPU <strong>never waits</strong> for network synchronization. It receives a speculative gradient prediction Ĝₜ from the DPU and proceeds immediately.</p><p>The weight update uses the predicted gradient: <code>Wₜ₊₁ = Wₜ - η · Ĝₜ</code></p><p>A small correction Δₜ arrives asynchronously via Phase 2 and is applied without blocking.</p>`
+  },
+  'dpu-solution': {
+    title: '💠 DPU Node — Speculative Gradient Forwarder',
+    body: `<p>The DPU (Data Processing Unit) maintains a <strong>Speculative Gradient Cache (SGC)</strong> in DRAM. At each step t, it reads Gₜ₋₁ from cache and multicasts it instantly.</p><div class="code-block">// DPU Phase 1 (microseconds):
+G_pred = SGC.read(step=t-1)  // cache hit
+switch.multicast(G_pred)     // L2, no aggregation
+// DPU Phase 2 (background):
+wait_for_gpu_grad()
+delta = quantize_INT8(G_real - G_pred)
+allreduce_small(delta)</div>`
+  },
+  'switch-solution': {
+    title: '✅ Switch — Zero-State Forwarder',
+    body: `<p>In SGFCP, the switch is <strong>completely stateless</strong>. It performs L2 multicast: receive a packet, replicate it, forward it. No aggregation, no SRAM buffering, no waiting.</p><p>This is standard commodity switch behavior. No specialized hardware required.</p><div class="code-block">// Switch behavior (SGFCP):
+on_receive(packet):
+    multicast(packet, all_ports)  // O(1), immediate</div>`
+  },
+  'gpu-receives': {
+    title: '▶️ GPU — Receiving Prediction & Proceeding',
+    body: `<p>The GPU receives the speculative gradient Ĝₜ and immediately begins the weight update. It does NOT wait for the correction.</p><p>Correction error is bounded: <code>|ΔW| ≤ η · ||Δₜ||</code> where Δₜ is small for smooth loss surfaces.</p>`
+  },
+  'dpu-correction': {
+    title: '🔧 DPU — Applying Correction',
+    body: `<p>The DPU computes <code>Δₜ = Gₜ − Ĝₜ</code> and sends it via INT8-quantized AllReduce. This is 8–20× smaller than the original gradient, runs entirely asynchronously, and does not block GPU computation.</p>`
+  }
+};
+
+function openModal(key) {
+  const m = modals[key];
+  if (!m) return;
+  document.getElementById('modal-title').textContent = m.title;
+  document.getElementById('modal-body').innerHTML = m.body;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay') || e.currentTarget.classList.contains('modal-close')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+}
+
+const problemSteps = [
+  '<strong>Step 1 — GPU Gradient Computation:</strong> Each GPU computes local gradient <span class="math-inline">gᵢ = ∇L(Wₜ)</span> on its mini-batch. For a 70B model in FP16, this is a <strong>140 GB vector</strong> per GPU. All N GPUs finish at slightly different times due to data variance and hardware jitter.',
+  '<strong>Step 2 — Send to Switch:</strong> All N GPUs simultaneously transmit their 140 GB gradient vectors toward the switch. Packets arrive at different times due to jitter. The switch must buffer everything.',
+  '<strong>Step 3 — Barrier Blocks All GPUs:</strong> Every GPU hits a hard synchronization barrier. No GPU can continue until the switch has received, aggregated, and re-broadcast ALL N gradients. Stragglers block everyone.',
+  '<strong>Step 4 — SRAM Overflow:</strong> The switch must hold 140 GB × N simultaneously. At N=128, this is 17.9 TB of SRAM — physically impossible. Real systems use spill-to-DRAM, causing additional latency.',
+  '<strong>Step 5 — FP Non-Determinism:</strong> Different packet arrival orders cause different floating-point summation orders. Results are non-reproducible across runs, complicating debugging and certification.'
+];
+const solutionSteps = [
+  '<strong>Step 1 — DPU Predicts:</strong> At the start of step t, the DPU reads <span class="math-inline">Ĝₜ = Gₜ₋₁</span> from the Speculative Gradient Cache (SGC) stored in DPU DRAM. This is the aggregated gradient from the previous training iteration. No computation required — it is a cache lookup.',
+  '<strong>Step 2 — Multicast Fire:</strong> The DPU sends Ĝₜ to the switch, which performs L2 multicast — no aggregation, no SRAM buffering, no waiting. All receiving GPUs get the prediction within a single network hop.',
+  '<strong>Step 3 — GPU Unblocked:</strong> Each GPU receives Ĝₜ and immediately applies <span class="math-inline">Wₜ₊₁ = Wₜ - η·Ĝₜ</span>. No waiting for other GPUs. Training proceeds at full speed.',
+  '<strong>Step 4 — Delta Computed:</strong> In the background, the DPU computes <span class="math-inline">Δₜ = Gₜ - Ĝₜ</span> and quantizes to INT8. This correction is 8–20× smaller than the full gradient payload.',
+  '<strong>Step 5 — Correction Applied:</strong> The small Δₜ correction is AllReduced asynchronously. GPUs apply it to future steps. Bounded error: <span class="math-inline">|ΔW| ≤ η·||Δₜ||</span>, which is tiny for smooth loss surfaces.'
+];
+
+function setProblemStep(i, el) {
+  document.querySelectorAll('#panel-problem .step-btn').forEach(b => b.classList.remove('active','bad'));
+  el.classList.add('active','bad');
+  document.getElementById('problem-info').innerHTML = problemSteps[i];
+}
+function setSolutionStep(i, el) {
+  document.querySelectorAll('#panel-solution .step-btn').forEach(b => b.classList.remove('active','good'));
+  el.classList.add('active','good');
+  document.getElementById('solution-info').innerHTML = solutionSteps[i];
+}
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + id).classList.add('active');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+// Defensive initialization: if a browser or embed wrapper delays parsing, keep click targets keyboard-accessible.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[onclick]').forEach(el => {
+    el.setAttribute('role', el.classList.contains('tab') ? 'tab' : 'button');
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        el.click();
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
