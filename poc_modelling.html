@@ -108,7 +108,7 @@
     <div class="chart-card">
       <div class="title">Benefit by training phase</div>
       <div class="caption">Compression vs. divergence rate across four training phases, dimension-weighted across all simulated layer types.</div>
-      <canvas id="chart-phase" height="260"></canvas>
+      <canvas id="chart-phase" data-height="260"></canvas>
     </div>
 
     <div class="callout green" id="overview-callout"></div>
@@ -120,7 +120,7 @@
     <div class="chart-card">
       <div class="title">‖Δ‖ / ‖G_t‖ over 50,000 training steps (model-weighted)</div>
       <div class="caption">Sampled every 100 steps from a 50,000-step × 6-seed × 4-layer-type run. Dashed line marks the divergence threshold θ = 0.3.</div>
-      <canvas id="chart-ratio" height="280"></canvas>
+      <canvas id="chart-ratio" data-height="280"></canvas>
     </div>
     <div class="callout blue"><strong>Interpretation</strong>The ratio starts high and noisy during the first ~500 warmup steps (the predictor has little history to work from), then drops and flattens once training stabilizes — confirming that adjacent-step gradients become highly autocorrelated as claimed in Part II.2. Because the line stays well below the θ = 0.3 fallback threshold for almost the entire run, the speculative prediction is usable on nearly every step, which is what makes the INT8 delta small enough to compress heavily instead of triggering a full-sync fallback.</div>
     <div class="grid cols-3">
@@ -138,7 +138,7 @@
     <div class="chart-card">
       <div class="title">Divergence event rate over training (model-weighted, log y-axis)</div>
       <div class="caption">Fraction of steps triggering full-sync fallback, sampled every 100 steps.</div>
-      <canvas id="chart-divergence" height="260"></canvas>
+      <canvas id="chart-divergence" data-height="260"></canvas>
     </div>
     <div class="callout orange"><strong>Interpretation</strong>On the log-scale y-axis, the divergence rate spikes near the start of training (warmup instability, larger gradient shocks) and then settles to a low, roughly flat floor once the AR(1) process stabilizes. The stable-phase rate (0.21%) sits an order of magnitude below the &lt;2% design target from Part IV.5, so the fallback circuit breaker is rarely needed once training has warmed up.</div>
     <div class="grid cols-3">
@@ -152,7 +152,7 @@
     <p class="sub">Cumulative running mean of the delta ratio and divergence rate as more simulated steps are included — flattening confirms the run collected enough iterations for the headline numbers to be trustworthy rather than noise from a short run.</p>
     <div class="chart-card">
       <div class="title">Running-mean convergence (log x-axis)</div>
-      <canvas id="chart-itconv" height="260"></canvas>
+      <canvas id="chart-itconv" data-height="260"></canvas>
     </div>
     <div class="callout"><strong>Interpretation</strong>Both running-mean curves flatten out well before the end of the log-scaled x-axis, meaning the headline delta-ratio and divergence-rate numbers are not artifacts of a short or lucky run — they stop moving materially once enough steps (out of the 153.6M total simulated rounds) have been averaged in, which is the basis for calling this a "sufficient iterations" result rather than a single noisy sample.</div>
   </section>
@@ -163,7 +163,7 @@
     <div class="chart-card">
       <div class="title">GPU-blocking latency: standard AllReduce vs. SGFCP Phase 1</div>
       <div class="caption">Phase 1 (speculative multicast) is the only latency on the GPU's critical path; Phase 2 delta correction runs asynchronously in the background.</div>
-      <canvas id="chart-latency" height="280"></canvas>
+      <canvas id="chart-latency" data-height="280"></canvas>
     </div>
     <div class="callout green"><strong>Interpretation</strong>Standard AllReduce latency grows with log₂(N) because every node must participate in the ring before the GPU can proceed. SGFCP Phase 1 latency is flat in N — it is just one multicast send, not a ring — so the gap between the two bars widens as the cluster grows, which is why the modeled GPU-visible speedup is largest (\~10×) at N = 1024+ nodes and smaller (but still positive) at N = 8.</div>
     <div class="table-wrap"><table id="table-latency"></table></div>
@@ -174,7 +174,7 @@
     <p class="sub">Weight drift accumulated over 5,000 steps (20 trials, 64 simulated nodes) as a fraction of nodes randomly fail to deliver their Phase 2 delta contribution each step.</p>
     <div class="chart-card">
       <div class="title">Weight drift vs. per-step node failure probability</div>
-      <canvas id="chart-fault" height="260"></canvas>
+      <canvas id="chart-fault" data-height="260"></canvas>
     </div>
     <div class="callout green"><strong>Interpretation</strong>Because a missing Phase 2 contribution only staleness-biases the running correction (rather than blocking the job, as in standard barrier-synchronous AllReduce), weight drift grows gracefully and sub-linearly with failure probability — consistent with known results for asynchronous SGD with dropped gradients.</div>
   </section>
@@ -267,7 +267,12 @@ function dpr(){ return window.devicePixelRatio || 1; }
 function setupCanvas(canvas){
   const ratio = dpr();
   const w = canvas.clientWidth || canvas.parentElement.clientWidth;
-  const h = parseInt(canvas.getAttribute('height')) || 260;
+  // Read the stable, author-set height from data-height (never mutated) rather
+  // than the "height" attribute, which the canvas.height property setter below
+  // reflects back onto the element — reading it back in would compound the
+  // scaling on every redraw (tab switch / resize) and make charts grow taller
+  // each time.
+  const h = parseInt(canvas.getAttribute('data-height')) || 260;
   canvas.width = w*ratio; canvas.height = h*ratio;
   canvas.style.height = h+'px';
   const ctx = canvas.getContext('2d');
@@ -282,9 +287,8 @@ function niceColor(name){
 function lineChart(canvasId, series, opts={}){
   const canvas = document.getElementById(canvasId);
   const {ctx,w,h} = setupCanvas(canvas);
-  const padL = opts.padL ?? 46, padR = opts.padR ?? 16, padT = opts.padT ?? 14, padB = opts.padB ?? 28;
-  const plotW = w-padL-padR, plotH = h-padT-padB;
-  ctx.clearRect(0,0,w,h);
+  const padR = opts.padR ?? 16, padT = opts.padT ?? 14, padB = opts.padB ?? 28;
+  ctx.font = '11px -apple-system,sans-serif';
 
   let allX = [], allY = [];
   series.forEach(s=>{ s.x.forEach(v=>allX.push(v)); s.y.forEach(v=>allY.push(v)); });
@@ -296,18 +300,31 @@ function lineChart(canvasId, series, opts={}){
   if(yLog){ minY = Math.log10(Math.max(opts.yLogFloor||1e-4, Math.min(...allY.filter(v=>v>0)))); maxY = Math.log10(Math.max(...allY)); }
   if(maxY===minY) maxY = minY+1;
 
+  // Measure the widest y-axis label first so long labels (percentages, large
+  // counts, scientific notation) always have room and never get clipped
+  // against the canvas's left edge.
+  const gridN = 4;
+  let maxLabelW = 0;
+  const yLabels = [];
+  for(let i=0;i<=gridN;i++){
+    const val = maxY - (maxY-minY)*i/gridN;
+    const label = yLog ? (opts.yFmt? opts.yFmt(Math.pow(10,val)) : Math.pow(10,val).toFixed(3)) : (opts.yFmt? opts.yFmt(val) : val.toFixed(2));
+    yLabels.push(label);
+    maxLabelW = Math.max(maxLabelW, ctx.measureText(label).width);
+  }
+  const padL = opts.padL ?? Math.ceil(maxLabelW + 22);
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  ctx.clearRect(0,0,w,h);
+
   const xToPx = v => { const vv = xLog? Math.log10(Math.max(v,1e-9)) : v; return padL + (vv-minX)/(maxX-minX||1)*plotW; };
   const yToPx = v => { const vv = yLog? Math.log10(Math.max(v, opts.yLogFloor||1e-4)) : v; return padT + plotH - (vv-minY)/(maxY-minY||1)*plotH; };
 
   ctx.strokeStyle = niceColor('--border'); ctx.fillStyle = niceColor('--text2');
   ctx.font = '11px -apple-system,sans-serif'; ctx.lineWidth = 1;
-  const gridN = 4;
   for(let i=0;i<=gridN;i++){
     const yy = padT + plotH*i/gridN;
     ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(padL+plotW,yy); ctx.stroke();
-    const val = maxY - (maxY-minY)*i/gridN;
-    const label = yLog ? (opts.yFmt? opts.yFmt(Math.pow(10,val)) : Math.pow(10,val).toFixed(3)) : (opts.yFmt? opts.yFmt(val) : val.toFixed(2));
-    ctx.textAlign='right'; ctx.fillText(label, padL-8, yy+3);
+    ctx.textAlign='right'; ctx.fillText(yLabels[i], padL-8, yy+3);
   }
   ctx.beginPath(); ctx.moveTo(padL,padT); ctx.lineTo(padL,padT+plotH); ctx.stroke();
 
@@ -346,23 +363,36 @@ function lineChart(canvasId, series, opts={}){
 function barChart(canvasId, categories, seriesList, opts={}){
   const canvas = document.getElementById(canvasId);
   const {ctx,w,h} = setupCanvas(canvas);
-  const padL = opts.padL ?? 46, padR = opts.padR ?? 16, padT = opts.padT ?? 14, padB = opts.padB ?? 46;
-  const plotW = w-padL-padR, plotH = h-padT-padB;
-  ctx.clearRect(0,0,w,h);
+  const padR = opts.padR ?? 16, padT = opts.padT ?? 14, padB = opts.padB ?? 46;
+  ctx.font='11px -apple-system,sans-serif';
 
   const allVals = seriesList.flatMap(s=>s.values);
   const maxY = opts.maxY ?? Math.max(...allVals)*1.15;
   const minY = 0;
+
+  // Measure the widest y-axis label first so long labels never get clipped
+  // against the canvas's left edge.
+  const gridN=4;
+  let maxLabelW = 0;
+  const yLabels = [];
+  for(let i=0;i<=gridN;i++){
+    const val = maxY - (maxY-minY)*i/gridN;
+    const label = opts.yFmt? opts.yFmt(val): val.toFixed(1);
+    yLabels.push(label);
+    maxLabelW = Math.max(maxLabelW, ctx.measureText(label).width);
+  }
+  const padL = opts.padL ?? Math.ceil(maxLabelW + 22);
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  ctx.clearRect(0,0,w,h);
+
   const yToPx = v => padT + plotH - (v-minY)/(maxY-minY)*plotH;
 
   ctx.strokeStyle = niceColor('--border'); ctx.fillStyle = niceColor('--text2');
   ctx.font='11px -apple-system,sans-serif'; ctx.lineWidth=1;
-  const gridN=4;
   for(let i=0;i<=gridN;i++){
     const yy = padT+plotH*i/gridN;
     ctx.beginPath(); ctx.moveTo(padL,yy); ctx.lineTo(padL+plotW,yy); ctx.stroke();
-    const val = maxY - (maxY-minY)*i/gridN;
-    ctx.textAlign='right'; ctx.fillText(opts.yFmt? opts.yFmt(val): val.toFixed(1), padL-8, yy+3);
+    ctx.textAlign='right'; ctx.fillText(yLabels[i], padL-8, yy+3);
   }
 
   function wrapLabelLines(text){
